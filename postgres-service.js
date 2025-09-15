@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Pool } = require('pg');
 const { getVectorsOr } = require('./lib/getVectorsOr');
+const { clearName } = require('./lib/clearName');
 
 const pool = new Pool({
   user: process.env.PG_USER,
@@ -25,9 +26,10 @@ async function findOrganization(name) {
       select name
       from organizations, to_tsquery(unaccent($1)) query
       where organizations.name_vectors_unaccent @@ query
-        and ts_rank_cd(organizations.name_vectors_unaccent, query) > 0.2;
+        and ts_rank_cd(organizations.name_vectors_unaccent, query) > 0.3 
+        OR organizations.name ILIKE '%' || $2 || '%';
 `,
-      [tsVector],
+      [tsVector, name],
     );
 
     return res;
@@ -37,4 +39,16 @@ async function findOrganization(name) {
   }
 }
 
-module.exports = { findOrganization };
+async function addOrganization(name) {
+  if (!name?.length) {
+    console.error('Empty name');
+    return;
+  }
+  await pool.query(
+    `
+  insert into organizations (name) values ($1)`,
+    [clearName(name)],
+  );
+}
+
+module.exports = { findOrganization, addOrganization };
